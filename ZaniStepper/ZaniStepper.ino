@@ -46,7 +46,8 @@ const int IncrementWidth = 1;
 
 // 1 = clock wise turn, 0 = counter clock wise
 volatile boolean DIRECTION = 1;
-
+// 1 = commit changes, 0 = no changes
+volatile boolean doAction = 1;
 
 // variable to store the actual speed and direction
 volatile int EncoderSpeedRPM = 0;
@@ -54,41 +55,76 @@ volatile int EncoderSpeedRPM = 0;
 // variable to store the press time for Swtich
 volatile int ButtonPressedTime = 0;
 
-
 // enabled/disabled state
 // 1 = engine enbaled, 0 = engine dead
 volatile int active = 0;
 
 // variables to store the actual activr state and speed
-
 int ActualEncoderSpeedRPM = EncoderSpeedRPM;
 
 // 1 = engine enbaled, 0 = engine dead
 int ActualActive = 0;
 
+#define DEBOUNCE 10  // button debouncer, how many ms to debounce, 5+ ms is usually plenty
+
+// here is where we define the buttons that we'll use. button "1" is the first, button "6" is the 6th, etc
+byte buttons[] = {Switch}; // the analog 0-5 pins are also known as 14-19
+// This handy macro lets us determine how big the array up above is, by checking the size
+#define NUMBUTTONS sizeof(buttons)
+// we will track if a button is just pressed, just released, or 'currently pressed' 
+byte pressed[NUMBUTTONS], justpressed[NUMBUTTONS], justreleased[NUMBUTTONS];
+
+
+
 //AH_Pololu(int RES, int DIR, int STEP, int MS1, int MS2, int MS3, int SLEEP, int ENABLE, int RESET);
 AH_Pololu stepper(200,DIR,STEP,MS1,MS2,MS3,SLP,ENABLE,RST);   // init with all functions
 
 
+void check_switches()
+{
+  static byte previousstate[NUMBUTTONS];
+  static byte currentstate[NUMBUTTONS];
+  static long lasttime;
+  byte index;
 
-// define Function for Button Interrupt
-void ButtonAction() {
- // short push toggle enable/disable motor
- // long push (t>0.5s) change direction
- if (digitalRead(Switch) == HIGH) { // transition from high to low
-   ButtonPressedTime = millis() - ButtonPressedTime;
-   if (ButtonPressedTime > 500) { // long push -> change direction
-     DIRECTION = !DIRECTION;
-     //Serial.println("LongPush ");
-   }
-   else { // short push toggle enable/disable stepper
-     active = !active;
-   }
- }
- else { // transition from LOW to HIGH
-   ButtonPressedTime = millis();
-   //Serial.println("TimerStart ");
- }
+  if (millis()) {// we wrapped around, lets just try again
+     lasttime = millis();
+  }
+  
+  if ((lasttime + DEBOUNCE) > millis()) {
+    // not enough time has passed to debounce
+    return; 
+  }
+  // ok we have waited DEBOUNCE milliseconds, lets reset the timer
+  lasttime = millis();
+  
+  for (index = 0; index < NUMBUTTONS; index++) { // when we start, we clear out the "just" indicators
+    justreleased[index] = 0;     
+    currentstate[index] = digitalRead(buttons[index]);   // read the button
+    
+    /*     
+    Serial.print(index, DEC);
+    Serial.print(": cstate=");
+    Serial.print(currentstate[index], DEC);
+    Serial.print(", pstate=");
+    Serial.print(previousstate[index], DEC);
+    Serial.print(", press=");
+    */
+    
+    if (currentstate[index] == previousstate[index]) {
+      if ((pressed[index] == LOW) && (currentstate[index] == LOW)) {
+          // just pressed
+          justpressed[index] = 1;
+      }
+      else if ((pressed[index] == HIGH) && (currentstate[index] == HIGH)) {
+          // just released
+          justreleased[index] = 1;
+      }
+      pressed[index] = !currentstate[index];  // remember, digital HIGH means NOT pressed
+    }
+    //Serial.println(pressed[index], DEC);
+    previousstate[index] = currentstate[index];   // keep a running tally of the buttons
+  }
 }
 
 
@@ -116,7 +152,6 @@ void EncoderAction() {
 }
 
 
-
 void setup() {
  /////////////////////////////////////////////////////////////////
  // Setup stepper driver
@@ -136,11 +171,17 @@ void setup() {
 
  /////////////////////////////////////////////////////////////////
  // setup switch input
- pinMode(Switch, INPUT);
+ byte i;
+ // Make input & enable pull-up resistors on switch pins
+ for (i=0; i< NUMBUTTONS; i++) {
+    pinMode(buttons[i], INPUT);
+    digitalWrite(buttons[i], HIGH);
+ }
+ //pinMode(Switch, INPUT);
  // enable pullup resitor on switch
- digitalWrite(Switch, HIGH);
+ //digitalWrite(Switch, HIGH);
  // attach interrrupt 1 on pin 3 to button in digital port
- attachInterrupt(1, ButtonAction, CHANGE);
+ //attachInterrupt(1, ButtonAction, CHANGE);
  /////////////////////////////////////////////////////////////////
 
  /////////////////////////////////////////////////////////////////
@@ -168,20 +209,54 @@ void setup() {
 }
 
 void loop() {
- if (ActualActive != active) {
-   ActualActive = active;
-   if (active) {
-     stepper.sleepOFF();
-   }
-   else {
-     stepper.sleepON();
-   }
- }
- if (ActualEncoderSpeedRPM != EncoderSpeedRPM) {
-   ActualEncoderSpeedRPM = EncoderSpeedRPM;
-   //Serial.println(EncoderSpeedRPM);
-   stepper.setSpeedRPM(EncoderSpeedRPM);
- }
- //stepper.rotate(360);
-stepper.move(1,DIRECTION);
+  doAction = 0;
+  check_switches();      // when we check the switches we'll get the current state
+  for (byte i = 0; i < NUMBUTTONS; i++) {
+    if (justpressed[i]) {
+      Serial.print(i, DEC);
+      Serial.println(" Just pressed"); 
+      // remember, check_switches() will CLEAR the 'just pressed' flag
+      ButtonPressedTime = millis();
+    }
+    if (justreleased[i]) {
+      Serial.print(i, DEC);
+      Serial.println(" Just released");
+      // remember, check_switches() will CLEAR the 'just pressed' flag
+      ButtonPressedTime = millis() - ButtonPressedTime;
+      doAction = 1;
+    }
+    if (pressed[i]) {
+      Serial.print(i, DEC);
+      Serial.println(" pressed");
+      // is the button pressed down at this moment
+      
+      
+    }  
+  }  
+  if (doAction) {
+    if (ButtonPressedTime > 500) { // long push -> change direction
+      DIRECTION = !DIRECTION;
+      //Serial.println("LongPush ");
+    }
+    else { // short push toggle enable/disable stepper
+      active = !active;
+    }
+  }
+  
+  if (ActualActive != active) {
+    ActualActive = active;
+    if (active) {
+      stepper.sleepOFF();
+    }
+    else {
+      stepper.sleepON();
+    }
+  }
+  if (ActualEncoderSpeedRPM != EncoderSpeedRPM) {
+    ActualEncoderSpeedRPM = EncoderSpeedRPM;
+    //Serial.println(EncoderSpeedRPM);
+    stepper.setSpeedRPM(EncoderSpeedRPM);
+  }
+  //stepper.rotate(360);
+  stepper.move(1,DIRECTION);
 }
