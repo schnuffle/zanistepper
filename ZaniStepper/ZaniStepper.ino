@@ -8,7 +8,7 @@
 
 // written by marc Schaefer
 // 24.06.2013
-// v 0.1
+// v 0.2
 // license is GPL v2 or later
 
 
@@ -45,24 +45,23 @@ const int MinRPM = 3;
 const int IncrementWidth = 1;
 
 // 1 = clock wise turn, 0 = counter clock wise
-volatile boolean DIRECTION = 1;
+boolean DIRECTION = 1;
 // 1 = commit changes, 0 = no changes
-volatile boolean doAction = 1;
+boolean doAction = 0;
 
-// variable to store the actual speed and direction
+// variable to store the actual speed
 volatile int EncoderSpeedRPM = 0;
+// variables to store the actual speed
+volatile int ActualEncoderSpeedRPM = EncoderSpeedRPM;
 
-// variable to store the press time for Swtich
-volatile int ButtonPressedTime = 0;
+
+// variable to store the press time for the Switch
+long ButtonPressedTime = 0;
 
 // enabled/disabled state
-// 1 = engine enbaled, 0 = engine dead
-volatile int active = 0;
-
-// variables to store the actual activr state and speed
-int ActualEncoderSpeedRPM = EncoderSpeedRPM;
-
-// 1 = engine enbaled, 0 = engine dead
+// 1 = engine enabled, 0 = engine dead
+int active = 0;
+// 1 = engine enabled, 0 = engine dead
 int ActualActive = 0;
 
 #define DEBOUNCE 10  // button debouncer, how many ms to debounce, 5+ ms is usually plenty
@@ -79,6 +78,9 @@ byte pressed[NUMBUTTONS], justpressed[NUMBUTTONS], justreleased[NUMBUTTONS];
 //AH_Pololu(int RES, int DIR, int STEP, int MS1, int MS2, int MS3, int SLEEP, int ENABLE, int RESET);
 AH_Pololu stepper(200,DIR,STEP,MS1,MS2,MS3,SLP,ENABLE,RST);   // init with all functions
 
+
+/////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////
 
 void check_switches()
 {
@@ -98,8 +100,8 @@ void check_switches()
   // ok we have waited DEBOUNCE milliseconds, lets reset the timer
   lasttime = millis();
   
-  for (index = 0; index < NUMBUTTONS; index++) { // when we start, we clear out the "just" indicators
-    justreleased[index] = 0;     
+  for (index = 0; index < NUMBUTTONS; index++) { 
+    justreleased[index] = 0;                             // when we start, we clear out the "just" indicators
     currentstate[index] = digitalRead(buttons[index]);   // read the button
     
     /*     
@@ -125,35 +127,42 @@ void check_switches()
     //Serial.println(pressed[index], DEC);
     previousstate[index] = currentstate[index];   // keep a running tally of the buttons
   }
-}
+} // check_switches
 
+
+/////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////
 
 void EncoderAction() {
-   if (digitalRead(ChanAPin) == HIGH) {   // found a low-to-high on channel A
-   if (digitalRead(ChanBPin) == LOW) {  // check channel B to see which way
+  if (digitalRead(ChanAPin) == HIGH) {   // found a low-to-high on channel A
+    if (digitalRead(ChanBPin) == LOW) {  // check channel B to see which way
                                             // encoder is turning
-     EncoderSpeedRPM = min(EncoderSpeedRPM + IncrementWidth, MaxRPM);         // CCW
-   }
-   else {
-     EncoderSpeedRPM = max(EncoderSpeedRPM - IncrementWidth, MinRPM);         // CW
-   }
- }
- else                                        // found a high-to-low on channel A
- {
-   if (digitalRead(ChanBPin) == LOW) {   // check channel B to see which way
+      EncoderSpeedRPM = min(EncoderSpeedRPM + IncrementWidth, MaxRPM);         // CCW
+    }
+    else {
+      EncoderSpeedRPM = max(EncoderSpeedRPM - IncrementWidth, MinRPM);         // CW
+    }
+  }
+  else                                        // found a high-to-low on channel A
+  {
+    if (digitalRead(ChanBPin) == LOW) {   // check channel B to see which way
                                              // encoder is turning
       EncoderSpeedRPM = max(EncoderSpeedRPM - IncrementWidth, MinRPM);          // CW
-   }
-   else {
+    }
+    else {
       EncoderSpeedRPM = min(EncoderSpeedRPM + IncrementWidth, MaxRPM);          // CCW
-   }
+    }
+  }
+} // EncoderAction
 
- }
-}
 
+
+
+/////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////
 
 void setup() {
- /////////////////////////////////////////////////////////////////
  // Setup stepper driver
  stepper.resetDriver();                  // reset driver
  stepper.disableDriver();                // disbale driver
@@ -177,13 +186,8 @@ void setup() {
     pinMode(buttons[i], INPUT);
     digitalWrite(buttons[i], HIGH);
  }
- //pinMode(Switch, INPUT);
- // enable pullup resitor on switch
- //digitalWrite(Switch, HIGH);
- // attach interrrupt 1 on pin 3 to button in digital port
- //attachInterrupt(1, ButtonAction, CHANGE);
- /////////////////////////////////////////////////////////////////
 
+ 
  /////////////////////////////////////////////////////////////////
  //setup Encoder
  // setup ChanA and ChanB input
@@ -213,21 +217,21 @@ void loop() {
   check_switches();      // when we check the switches we'll get the current state
   for (byte i = 0; i < NUMBUTTONS; i++) {
     if (justpressed[i]) {
-      Serial.print(i, DEC);
-      Serial.println(" Just pressed"); 
+      //Serial.print(i, DEC);
+      //Serial.println(" Just pressed"); 
       // remember, check_switches() will CLEAR the 'just pressed' flag
       ButtonPressedTime = millis();
     }
     if (justreleased[i]) {
-      Serial.print(i, DEC);
-      Serial.println(" Just released");
+      //Serial.print(i, DEC);
+      //Serial.println(" Just released");
       // remember, check_switches() will CLEAR the 'just pressed' flag
       ButtonPressedTime = millis() - ButtonPressedTime;
       doAction = 1;
     }
     if (pressed[i]) {
-      Serial.print(i, DEC);
-      Serial.println(" pressed");
+      //Serial.print(i, DEC);
+      //Serial.println(" pressed");
       // is the button pressed down at this moment
       
       
