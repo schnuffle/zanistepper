@@ -44,9 +44,9 @@ const int ENABLE    = 12;
 
 
 // define paramter for stepper speed
-const int MaxRPM = 100;
-const int MinRPM = 3;
-const int MaxDeltaRPMS = 10;
+const int MaxRPM = 15;
+const int MinRPM = 2;
+const int MaxDeltaRPMS = 1;
 const int IncrementWidth = 1;
 
 // 1 = clock wise turn, 0 = counter clock wise
@@ -140,14 +140,14 @@ void setNewSpeedDirectionActive() {
     if ((ActualActive) && (active)) {
       if (DIRECTION==AcDIR) {        
         if (ActualEncoderSpeedRPM < EncoderSpeedRPM) {
-          ActualEncoderSpeedRPM = ActualEncoderSpeedRPM + MaxDeltaRPMS/10;
+          ActualEncoderSpeedRPM = ActualEncoderSpeedRPM + MaxDeltaRPMS;
           stepper.setSpeedRPM(ActualEncoderSpeedRPM);
         } else if (ActualEncoderSpeedRPM > EncoderSpeedRPM) {
-          ActualEncoderSpeedRPM = ActualEncoderSpeedRPM - MaxDeltaRPMS/10;
+          ActualEncoderSpeedRPM = ActualEncoderSpeedRPM - MaxDeltaRPMS;
           stepper.setSpeedRPM(ActualEncoderSpeedRPM);
         }
       } else {
-        ActualEncoderSpeedRPM  = ActualEncoderSpeedRPM - MaxDeltaRPMS/10;
+        ActualEncoderSpeedRPM  = ActualEncoderSpeedRPM - MaxDeltaRPMS;
         stepper.setSpeedRPM(ActualEncoderSpeedRPM);
         if (ActualEncoderSpeedRPM < MinRPM) {
           AcDIR=!AcDIR;
@@ -159,7 +159,7 @@ void setNewSpeedDirectionActive() {
     
     if ((ActualActive) && (!active)) {
       if (ActualEncoderSpeedRPM >  MinRPM) {
-        ActualEncoderSpeedRPM = ActualEncoderSpeedRPM - MaxDeltaRPMS/10;
+        ActualEncoderSpeedRPM = ActualEncoderSpeedRPM - MaxDeltaRPMS;
         stepper.setSpeedRPM(ActualEncoderSpeedRPM);
       } else {
         ActualEncoderSpeedRPM = 0;
@@ -170,18 +170,16 @@ void setNewSpeedDirectionActive() {
     }
     if ((!ActualActive) && (active)) {
       ActualActive = 1;
-      stepper.sleepOFF();
       if (ActualEncoderSpeedRPM < EncoderSpeedRPM  ) {
-        ActualEncoderSpeedRPM = ActualEncoderSpeedRPM + MaxDeltaRPMS/10;
+        ActualEncoderSpeedRPM = ActualEncoderSpeedRPM + MaxDeltaRPMS;
         stepper.setSpeedRPM(ActualEncoderSpeedRPM);
       }    
+      stepper.sleepOFF();
     }
     if ((!ActualActive) && (!active)) {
         ActualEncoderSpeedRPM = 0;
         stepper.setSpeedRPM(ActualEncoderSpeedRPM);
     }
-
-
   }
 }
 
@@ -221,7 +219,7 @@ void setup() {
  // Setup stepper driver
  stepper.resetDriver();                  // reset driver
  stepper.disableDriver();                // disbale driver
- stepper.setMicrostepping(2);            // 0 -> Full Step
+ stepper.setMicrostepping(4);            // 0 -> Full Step
                                          // 1 -> 1/2 microstepping
                                          // 2 -> 1/4 microstepping
                                          // 3 -> 1/8 microstepping
@@ -271,7 +269,6 @@ void setup() {
 /////////////////////////////////////////////////////////////////
 
 void loop() {
-  doAction = 0;
   check_switch();      // when we check the switches we'll get the current state
   if (justpressed) {
     //Serial.println(" Just pressed"); 
@@ -302,9 +299,9 @@ void loop() {
       active = !active;
       //Serial.println(active);
     }
+    doAction = 0;
   } // doAction
-  
+
   setNewSpeedDirectionActive();
- 
   stepper.move(1,AcDIR);
 }
