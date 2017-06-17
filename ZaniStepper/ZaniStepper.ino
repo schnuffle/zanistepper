@@ -46,14 +46,14 @@ const int ENABLE    = 12;
 // define paramter for stepper speed
 const int MaxRPM = 15;
 const int MinRPM = 2;
-const int MaxDeltaRPMS = 1;
+const int DeltaRPMS = 1;
 const int IncrementWidth = 1;
 
 // 1 = clock wise turn, 0 = counter clock wise
-boolean DIRECTION = 1;
-boolean AcDIR = 1;
+static boolean DIRECTION = 1;
+static boolean AcDIR = 1;
 // 1 = commit changes, 0 = no changes
-boolean doAction = 0;
+static boolean doAction = 0;
 
 // variable to store the actual speed
 volatile int EncoderSpeedRPM = 0;
@@ -62,18 +62,17 @@ volatile int ActualEncoderSpeedRPM = EncoderSpeedRPM;
 
 
 // variable to store the press time for the Switch
-long ButtonPressedTime = 0;
-long dtimer = 0;
+static long ButtonPressedTime = 0;
 
 // enabled/disabled state
 // 1 = engine enabled, 0 = engine dead
-int active = 0;
+static int active = 0;
 // 1 = engine enabled, 0 = engine dead
-int ActualActive = 0;
+static int ActualActive = 0;
 
 #define DEBOUNCE 10  // button debouncer, how many ms to debounce, 5+ ms is usually plenty
 // we will track if a button is just pressed, just released, or 'currently pressed' 
-byte pressed, justpressed, justreleased;
+static byte pressed, justpressed, justreleased;
 
 
 
@@ -102,7 +101,8 @@ void check_switch()
   // ok we have waited DEBOUNCE milliseconds, lets reset the timer
   lasttime = millis();
    
-  justreleased = 0;                             // when we start, we clear out the "just" indicators
+  justreleased = 0;                     // when we start, we clear out the "just" indicators
+  // justpressed = 0;
   currentstate = digitalRead(Switch);   // read the button
              
   //Serial.print("cstate=");
@@ -131,56 +131,61 @@ void check_switch()
 /////////////////////////////////////////////////////////////////
 
 void setNewSpeedDirectionActive() {
+  static long dtimer;
 
+  if (!dtimer) {// we wrapped around, lets just try again
+     dtimer = millis();
+  }
+ 
   if ( millis() - dtimer > 100) {
     //Serial.println(ActualActive); //," Active: ",active," ActualEncoderSpeedRPM: ",ActualEncoderSpeedRPM);
     //Serial.println(active);
     //Serial.println(ActualEncoderSpeedRPM);
-    dtimer = millis();
+
     if ((ActualActive) && (active)) {
       if (DIRECTION==AcDIR) {        
         if (ActualEncoderSpeedRPM < EncoderSpeedRPM) {
-          ActualEncoderSpeedRPM = ActualEncoderSpeedRPM + MaxDeltaRPMS;
+          ActualEncoderSpeedRPM = ActualEncoderSpeedRPM + DeltaRPMS;
           stepper.setSpeedRPM(ActualEncoderSpeedRPM);
         } else if (ActualEncoderSpeedRPM > EncoderSpeedRPM) {
-          ActualEncoderSpeedRPM = ActualEncoderSpeedRPM - MaxDeltaRPMS;
+          ActualEncoderSpeedRPM = ActualEncoderSpeedRPM - DeltaRPMS;
           stepper.setSpeedRPM(ActualEncoderSpeedRPM);
         }
       } else {
-        ActualEncoderSpeedRPM  = ActualEncoderSpeedRPM - MaxDeltaRPMS;
+        ActualEncoderSpeedRPM  = ActualEncoderSpeedRPM - DeltaRPMS;
         stepper.setSpeedRPM(ActualEncoderSpeedRPM);
         if (ActualEncoderSpeedRPM < MinRPM) {
           AcDIR=!AcDIR;
-        }
-        
+        }  
       }
     } 
-
-    
     if ((ActualActive) && (!active)) {
       if (ActualEncoderSpeedRPM >  MinRPM) {
-        ActualEncoderSpeedRPM = ActualEncoderSpeedRPM - MaxDeltaRPMS;
+        ActualEncoderSpeedRPM = ActualEncoderSpeedRPM - DeltaRPMS;
         stepper.setSpeedRPM(ActualEncoderSpeedRPM);
       } else {
         ActualEncoderSpeedRPM = 0;
         ActualActive = 0;
         stepper.setSpeedRPM(ActualEncoderSpeedRPM);
-        stepper.sleepON();
+        //stepper.sleepON();
       }    
     }
     if ((!ActualActive) && (active)) {
       ActualActive = 1;
-      if (ActualEncoderSpeedRPM < EncoderSpeedRPM  ) {
-        ActualEncoderSpeedRPM = ActualEncoderSpeedRPM + MaxDeltaRPMS;
-        stepper.setSpeedRPM(ActualEncoderSpeedRPM);
-      }    
+      ActualEncoderSpeedRPM = MinRPM;
+      // EncoderSpeedRPM = ActualEncoderSpeedRPM;
+      stepper.setSpeedRPM(ActualEncoderSpeedRPM);   
+      DIRECTION = AcDIR; 
       stepper.sleepOFF();
     }
     if ((!ActualActive) && (!active)) {
         ActualEncoderSpeedRPM = 0;
         stepper.setSpeedRPM(ActualEncoderSpeedRPM);
+        stepper.sleepON();
     }
+     dtimer = millis();
   }
+ 
 }
 
 /////////////////////////////////////////////////////////////////
@@ -225,7 +230,7 @@ void setup() {
                                          // 3 -> 1/8 microstepping
                                          // 4 -> 1/16 microstepping
  // set speed to medium speed
- dtimer = 0;
+ //dtimer = 0;
  EncoderSpeedRPM = (MaxRPM+MinRPM)/2;
  ActualEncoderSpeedRPM = 0;
  stepper.setSpeedRPM(ActualEncoderSpeedRPM);   // set speed in RPM, rotations per minute
@@ -295,13 +300,16 @@ void loop() {
       DIRECTION = !DIRECTION;
       //Serial.println("LongPush ");
     }
-    else { // short push toggle enable/disable stepper
+    else { // short push -> toggle enable/disable stepper
       active = !active;
       //Serial.println(active);
     }
+    // Reset doAction as it has been done
     doAction = 0;
   } // doAction
 
   setNewSpeedDirectionActive();
-  stepper.move(1,AcDIR);
+  if (ActualActive) {
+    stepper.move(1,AcDIR);
+  }
 }
